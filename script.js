@@ -1,111 +1,176 @@
-// DOM Elements
-const kValueInput = document.getElementById('k-value');
-const pointsValueInput = document.getElementById('points-value');
-const initBtn = document.getElementById('init-btn');
-const stepBtn = document.getElementById('step-btn');
-const resetBtn = document.getElementById('reset-btn');
-const container = document.getElementById('container');
+const sceneContainer = document.getElementById('scene-container');
+const kSlider = document.getElementById('k-slider');
+const kValueDisplay = document.getElementById('k-value-display');
+const numPointsInput = document.getElementById('num-points');
+const generateDataBtn = document.getElementById('generate-data');
+const startBtn = document.getElementById('start-algorithm');
+const nextStepBtn = document.getElementById('next-step');
+const iterationInfo = document.getElementById('iteration-info');
 
-// Scene setup
 let scene, camera, renderer, points, centroids, lines;
+let data = [];
+let clusters = [];
+let k = parseInt(kSlider.value);
+let numPoints = parseInt(numPointsInput.value);
+let iteration = 0;
+let algorithmState = 'initial'; // initial, started, step, finished
+
+const colors = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4'];
+
+// --- Event Listeners ---
+generateDataBtn.addEventListener('click', () => {
+    reset();
+    generateData();
+});
+
+startBtn.addEventListener('click', () => {
+    if (points.length === 0) {
+        alert("Please generate data first.");
+        return;
+    }
+    startAlgorithm();
+});
+
+nextStepBtn.addEventListener('click', () => {
+    if (data.length === 0) {
+        alert("Please generate data first.");
+        return;
+    }
+    if (algorithmState === 'initial') {
+        startAlgorithm();
+    }
+    runSingleStep();
+});
+
+kSlider.addEventListener('input', () => {
+    kValueDisplay.textContent = kSlider.value;
+});
+
+kSlider.addEventListener('change', () => {
+    k = parseInt(kSlider.value);
+    if (data.length > 0) {
+        resetClustering();
+    }
+});
+
+numPointsInput.addEventListener('change', () => {
+    let value = parseInt(numPointsInput.value);
+    if (isNaN(value) || value < 10) {
+        value = 10;
+    } else if (value > 1000) {
+        value = 1000;
+    }
+    numPointsInput.value = value;
+    numPoints = value;
+    if (data.length > 0) {
+        reset();
+        generateData();
+    }
+});
+
+
+// --- Core Functions ---
 
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xffffff);
 
-    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.z = 5;
+    camera = new THREE.PerspectiveCamera(75, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
+    camera.position.set(0, 0, 6);
 
-    renderer = new THREE.WebGLRenderer();
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    container.innerHTML = ''; // Clear previous renderer
-    container.appendChild(renderer.domElement);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
+    sceneContainer.innerHTML = '';
+    sceneContainer.appendChild(renderer.domElement);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x404040);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.2);
     directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
 
-    // Controls
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.25;
-    controls.screenSpacePanning = false;
-    controls.maxPolarAngle = Math.PI / 2;
+    controls.dampingFactor = 0.1;
 
     window.addEventListener('resize', onWindowResize, false);
-
-    generateData();
+    
     animate();
+    generateData();
+    updateButtons();
 }
-
-function onWindowResize() {
-    camera.aspect = container.clientWidth / container.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
-}
-
-let data = [];
-let clusters = [];
-let k = 3;
-let numPoints = 300;
 
 function generateData() {
-    if (points) scene.remove(points);
-    if (centroids) scene.remove(centroids);
-    if (lines) scene.remove(lines);
-
     data = [];
     for (let i = 0; i < numPoints; i++) {
         data.push({
-            x: Math.random() * 4 - 2,
-            y: Math.random() * 4 - 2,
-            z: Math.random() * 4 - 2,
+            x: (Math.random() - 0.5) * 8,
+            y: (Math.random() - 0.5) * 8,
+            z: (Math.random() - 0.5) * 8,
             cluster: -1
         });
     }
-    drawPoints();
-    initBtn.style.display = 'inline-block';
-    stepBtn.style.display = 'none';
+    algorithmState = 'initial';
+    iteration = 0;
+    updateIterationInfo();
+    draw();
 }
 
-function drawPoints() {
-    const geometry = new THREE.BufferGeometry();
-    const positions = [];
-    const colors = [];
-    const color = new THREE.Color();
+function startAlgorithm() {
+    iteration = 0;
+    initializeCentroids();
+    assignPointsToClusters();
+    algorithmState = 'step';
+    updateIterationInfo();
+    updateButtons();
+    draw();
+}
 
-    const clusterColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0x00ffff, 0xff00ff];
+function runSingleStep() {
+    if (algorithmState !== 'step') return;
 
-    data.forEach(p => {
-        positions.push(p.x, p.y, p.z);
-        if (p.cluster === -1) {
-            color.set(0x808080); // Grey for unassigned
-        } else {
-            color.set(clusterColors[p.cluster % clusterColors.length]);
+    iteration++;
+    updateIterationInfo();
+
+    const centroidsMoved = updateCentroids();
+    assignPointsToClusters();
+    draw();
+
+    if (!centroidsMoved) {
+        algorithmState = 'finished';
+        updateButtons();
+        alert(`Clustering converged after ${iteration} iterations.`);
+    }
+}
+
+function reset() {
+    data = [];
+    centroids = [];
+    clusters = [];
+    iteration = 0;
+    algorithmState = 'initial';
+    if (scene) {
+         while(scene.children.length > 0){ 
+            scene.remove(scene.children[0]); 
         }
-        colors.push(color.r, color.g, color.b);
-    });
+    }
+    init();
+}
 
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({ size: 0.1, vertexColors: true });
-    
-    if (points) scene.remove(points);
-    points = new THREE.Points(geometry, material);
-    scene.add(points);
+function resetClustering() {
+    centroids = [];
+    clusters = [];
+    iteration = 0;
+    algorithmState = 'initial';
+    for (const point of data) {
+        point.cluster = -1;
+    }
+    updateIterationInfo();
+    updateButtons();
+    draw();
 }
 
 function initializeCentroids() {
-    k = parseInt(kValueInput.value);
     clusters = [];
     for (let i = 0; i < k; i++) {
         const randomIndex = Math.floor(Math.random() * data.length);
@@ -116,43 +181,30 @@ function initializeCentroids() {
             points: []
         });
     }
-    drawCentroids();
-    initBtn.style.display = 'none';
-    stepBtn.style.display = 'inline-block';
 }
 
-function drawCentroids() {
-    const geometry = new THREE.BufferGeometry();
-    const positions = [];
-    clusters.forEach(c => positions.push(c.x, c.y, c.z));
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    
-    const material = new THREE.PointsMaterial({ color: 0x000000, size: 0.2, sizeAttenuation: true });
-
-    if (centroids) scene.remove(centroids);
-    centroids = new THREE.Points(geometry, material);
-    scene.add(centroids);
-}
-
-function kMeansStep() {
-    // 1. Assign points to clusters
+function assignPointsToClusters() {
     clusters.forEach(c => c.points = []);
     data.forEach(p => {
         let minDistance = Infinity;
         let closestCluster = -1;
         clusters.forEach((c, index) => {
-            const distance = Math.sqrt(Math.pow(p.x - c.x, 2) + Math.pow(p.y - c.y, 2) + Math.pow(p.z - c.z, 2));
-            if (distance < minDistance) {
-                minDistance = distance;
+            const dist = distance(p, c);
+            if (dist < minDistance) {
+                minDistance = dist;
                 closestCluster = index;
             }
         });
         p.cluster = closestCluster;
-        clusters[closestCluster].points.push(p);
+        if (closestCluster !== -1) {
+            clusters[closestCluster].points.push(p);
+        }
     });
+}
 
-    // 2. Update centroid positions
-    clusters.forEach(c => {
+function updateCentroids() {
+    let moved = false;
+    clusters.forEach((c, index) => {
         if (c.points.length > 0) {
             let sumX = 0, sumY = 0, sumZ = 0;
             c.points.forEach(p => {
@@ -160,48 +212,94 @@ function kMeansStep() {
                 sumY += p.y;
                 sumZ += p.z;
             });
-            c.x = sumX / c.points.length;
-            c.y = sumY / c.points.length;
-            c.z = sumZ / c.points.length;
+            const newCentroid = {
+                x: sumX / c.points.length,
+                y: sumY / c.points.length,
+                z: sumZ / c.points.length
+            };
+
+            if (distance(clusters[index], newCentroid) > 0.01) {
+                moved = true;
+            }
+            clusters[index].x = newCentroid.x;
+            clusters[index].y = newCentroid.y;
+            clusters[index].z = newCentroid.z;
         }
     });
-
-    // 3. Redraw
-    drawPoints();
-    drawCentroids();
-    drawLines();
+    return moved;
 }
 
-function drawLines() {
-    if(lines) scene.remove(lines);
+// --- Drawing Functions ---
 
-    const material = new THREE.LineBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.5 });
-    const geometry = new THREE.BufferGeometry();
+function draw() {
+    if (points) scene.remove(points);
+    if (centroids) scene.remove(centroids);
+    if (lines) scene.remove(lines);
+
+    // Draw points
+    points = new THREE.Group();
+    const sphereGeometry = new THREE.SphereGeometry(0.1, 16, 8);
+    data.forEach(p => {
+        const color = p.cluster === -1 ? '#000000' : colors[p.cluster % colors.length];
+        const material = new THREE.MeshBasicMaterial({ color: color });
+        const sphere = new THREE.Mesh(sphereGeometry, material);
+        sphere.position.set(p.x, p.y, p.z);
+        points.add(sphere);
+    });
+    scene.add(points);
+
+    // Draw centroids
+    centroids = new THREE.Group();
+    const boxGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+    clusters.forEach((c, i) => {
+        const material = new THREE.MeshBasicMaterial({ color: colors[i % colors.length] });
+        const cube = new THREE.Mesh(boxGeometry, material);
+        cube.position.set(c.x, c.y, c.z);
+        centroids.add(cube);
+    });
+    scene.add(centroids);
+    
+    // Draw lines
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.5 });
     const linePoints = [];
-
     data.forEach(p => {
         if (p.cluster !== -1) {
             const centroid = clusters[p.cluster];
-            linePoints.push(p.x, p.y, p.z);
-            linePoints.push(centroid.x, centroid.y, centroid.z);
+            linePoints.push(new THREE.Vector3(p.x, p.y, p.z));
+            linePoints.push(new THREE.Vector3(centroid.x, centroid.y, centroid.z));
         }
     });
-
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(linePoints, 3));
-    lines = new THREE.LineSegments(geometry, material);
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints(linePoints);
+    lines = new THREE.LineSegments(lineGeometry, lineMaterial);
     scene.add(lines);
 }
 
-// Event Listeners
-initBtn.addEventListener('click', initializeCentroids);
-stepBtn.addEventListener('click', kMeansStep);
-resetBtn.addEventListener('click', () => {
-    numPoints = parseInt(pointsValueInput.value);
-    k = parseInt(kValueInput.value);
-    generateData();
-});
+// --- Utility Functions ---
 
-// Initial setup
-kValueInput.value = k;
-pointsValueInput.value = numPoints;
+function distance(p1, p2) {
+    return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) + Math.pow(p1.z - p2.z, 2));
+}
+
+function updateIterationInfo() {
+    iterationInfo.textContent = `Iteration: ${iteration}`;
+}
+
+function updateButtons() {
+    startBtn.disabled = algorithmState !== 'initial';
+    nextStepBtn.disabled = algorithmState === 'finished';
+    generateDataBtn.disabled = algorithmState === 'started' || algorithmState === 'step';
+}
+
+function onWindowResize() {
+    camera.aspect = sceneContainer.clientWidth / sceneContainer.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+
+// --- Initial Setup ---
 init();

@@ -3,21 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>K-Means Clustering 3D</title>
+    <title>K-Means Clustering Visualization</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>K-Means Clustering in 3D</h1>
-    <div id="controls">
-        <label for="k-value">Number of Clusters (K):</label>
-        <input type="number" id="k-value" value="3" min="1">
-        <label for="points-value">Number of Points:</label>
-        <input type="number" id="points-value" value="300" min="10">
-        <button id="init-btn">Initialize Centroids</button>
-        <button id="step-btn" style="display: none;">Step</button>
-        <button id="reset-btn">New Data</button>
+    <div class="container">
+        <div id="ui-panel">
+            <h1>K-Means 3D</h1>
+            <div id="controls">
+                <label for="k-slider">Number of Clusters (K): <span id="k-value-display">3</span></label>
+                <input type="range" id="k-slider" value="3" min="2" max="10">
+                <label for="num-points">Number of Points:</label>
+                <input type="number" id="num-points" value="300" min="10" max="1000">
+                <button id="generate-data">Generate Data</button>
+                <button id="start-algorithm">Start</button>
+                <button id="next-step">Next Step</button>
+            </div>
+        </div>
+        <div id="canvas-panel">
+            <p id="iteration-info">Iteration: 0</p>
+            <div id="scene-container"></div>
+        </div>
     </div>
-    <div id="container"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="script.js"></script>

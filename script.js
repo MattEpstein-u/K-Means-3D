@@ -26,8 +26,10 @@ const colors = ['#4363d8', '#e6194B', '#f58231', '#3cb44b', '#ffe119', '#911eb4'
 
 // --- Event Listeners ---
 generateDataPointsBtn.addEventListener('click', () => {
+    // Only reset data and clustering, do not re-initialize camera or controls
     reset();
     generateData();
+    draw();
 });
 
 initializeCentroidsBtn.addEventListener('click', () => {

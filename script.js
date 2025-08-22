@@ -87,22 +87,7 @@ function setupScene() {
     scene.background = new THREE.Color(0xffffff);
 
     camera = new THREE.PerspectiveCamera(75, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
-    
-    // Set default angle and zoom
-    const defaultZoom = 9;
-    const defaultAngleX = -24 * (Math.PI / 180); // Convert to radians
-    const defaultAngleY = 24 * (Math.PI / 180); // Convert to radians
-        const verticalOffset = -0.6; // Move cube slightly higher on the screen
-
-    // Start with a vector pointing along the Z axis
-    const cameraPosition = new THREE.Vector3(0, 0, defaultZoom);
-    // Rotate it to the desired angle
-    const euler = new THREE.Euler(defaultAngleX, defaultAngleY, 0, 'YXZ');
-    cameraPosition.applyEuler(euler);
-    // Add the vertical offset
-    cameraPosition.y += verticalOffset;
-
-    camera.position.copy(cameraPosition);
+    setDefaultCameraView();
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
@@ -120,8 +105,8 @@ function setupScene() {
     controls.dampingFactor = 0.1;
 
     // Set controls target and camera lookAt to the offset
-    controls.target.set(0, verticalOffset, 0);
-    camera.lookAt(0, verticalOffset, 0);
+    controls.target.set(0, -0.6, 0);
+    camera.lookAt(0, -0.6, 0);
     controls.update();
 
     window.addEventListener('resize', onWindowResize, false);
@@ -363,19 +348,20 @@ function animate() {
 setupScene();
 init();
 
+function getDefaultZoom() {
+    // Use zoom 11 for mobile, 9 for desktop
+    return window.innerWidth <= 768 ? 11 : 9;
+}
+
 function setDefaultCameraView() {
-    // Set default angle and zoom
-    const defaultZoom = 9;
+    const defaultZoom = getDefaultZoom();
     const defaultAngleX = -24 * (Math.PI / 180); // Convert to radians
     const defaultAngleY = 24 * (Math.PI / 180); // Convert to radians
     const verticalOffset = -0.6;
 
-    // Start with a vector pointing along the Z axis
     const cameraPosition = new THREE.Vector3(0, 0, defaultZoom);
-    // Rotate it to the desired angle
     const euler = new THREE.Euler(defaultAngleX, defaultAngleY, 0, 'YXZ');
     cameraPosition.applyEuler(euler);
-    // Add the vertical offset
     cameraPosition.y += verticalOffset;
 
     camera.position.copy(cameraPosition);

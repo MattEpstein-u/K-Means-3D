@@ -3,7 +3,7 @@ const kSlider = document.getElementById('k-slider');
 const kValueDisplay = document.getElementById('k-value-display');
 const numPointsInput = document.getElementById('num-points');
 const generateDataBtn = document.getElementById('generate-data');
-const startBtn = document.getElementById('start-algorithm');
+const initializeCentroidsBtn = document.getElementById('initialize-centroids');
 const nextStepBtn = document.getElementById('next-step');
 const iterationInfo = document.getElementById('iteration-info');
 
@@ -11,6 +11,7 @@ let scene, camera, renderer, points, centroids, lines;
 let data = [];
 let clusters = [];
 let k = parseInt(kSlider.value);
+let runningK = -1; // The actual K value the algorithm is running with
 let numPoints = parseInt(numPointsInput.value);
 let iteration = 0;
 let algorithmState = 'initial'; // initial, started, step, finished
@@ -23,11 +24,12 @@ generateDataBtn.addEventListener('click', () => {
     generateData();
 });
 
-startBtn.addEventListener('click', () => {
-    if (points.length === 0) {
+initializeCentroidsBtn.addEventListener('click', () => {
+    if (data.length === 0) {
         alert("Please generate data first.");
         return;
     }
+    resetClustering();
     startAlgorithm();
 });
 
@@ -44,13 +46,13 @@ nextStepBtn.addEventListener('click', () => {
 
 kSlider.addEventListener('input', () => {
     kValueDisplay.textContent = kSlider.value;
+    updateButtons();
 });
 
 kSlider.addEventListener('change', () => {
-    k = parseInt(kSlider.value);
-    if (data.length > 0) {
-        resetClustering();
-    }
+    // This listener is intentionally left blank. 
+    // The 'k' value is now read directly when 'Start' is clicked,
+    // and the button state is updated by the 'input' event listener.
 });
 
 numPointsInput.addEventListener('change', () => {
@@ -111,6 +113,7 @@ function generateData() {
         });
     }
     algorithmState = 'initial';
+    runningK = -1;
     iteration = 0;
     updateIterationInfo();
     draw();
@@ -118,6 +121,8 @@ function generateData() {
 
 function startAlgorithm() {
     iteration = 0;
+    k = parseInt(kSlider.value); // Read k value at the start
+    runningK = k;
     initializeCentroids();
     assignPointsToClusters();
     algorithmState = 'step';
@@ -134,6 +139,7 @@ function runSingleStep() {
 
     const centroidsMoved = updateCentroids();
     assignPointsToClusters();
+    updateButtons(); // Update button state after a step
     draw();
 
     if (!centroidsMoved) {
@@ -158,9 +164,9 @@ function reset() {
 }
 
 function resetClustering() {
-    centroids = [];
     clusters = [];
     iteration = 0;
+    runningK = -1;
     algorithmState = 'initial';
     for (const point of data) {
         point.cluster = -1;
@@ -284,9 +290,13 @@ function updateIterationInfo() {
 }
 
 function updateButtons() {
-    startBtn.disabled = algorithmState !== 'initial';
-    nextStepBtn.disabled = algorithmState === 'finished';
-    generateDataBtn.disabled = algorithmState === 'started' || algorithmState === 'step';
+    const sliderK = parseInt(kSlider.value);
+    // Disable start only if algorithm is running, no steps have been taken, and K is unchanged.
+    initializeCentroidsBtn.disabled = iteration === 0 && sliderK === runningK;
+    // Next step is available only when the algorithm is in the step phase.
+    nextStepBtn.disabled = algorithmState !== 'step';
+    // Generate data is always available.
+    generateDataBtn.disabled = false;
 }
 
 function onWindowResize() {

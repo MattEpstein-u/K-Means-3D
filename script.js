@@ -2,12 +2,17 @@ const sceneContainer = document.getElementById('scene-container');
 const kSlider = document.getElementById('k-slider');
 const kValueDisplay = document.getElementById('k-value-display');
 const numPointsInput = document.getElementById('num-points');
-const generateDataBtn = document.getElementById('generate-data');
+const generateDataPointsBtn = document.getElementById('generate-data-points');
 const initializeCentroidsBtn = document.getElementById('initialize-centroids');
 const nextStepBtn = document.getElementById('next-step');
 const iterationInfo = document.getElementById('iteration-info');
+const camAngleX = document.getElementById('cam-angle-x');
+const camAngleY = document.getElementById('cam-angle-y');
+const camAngleZ = document.getElementById('cam-angle-z');
+const camZoom = document.getElementById('cam-zoom');
+const resetCameraBtn = document.getElementById('reset-camera');
 
-let scene, camera, renderer, points, centroids, lines;
+let scene, camera, renderer, points, centroids, lines, controls;
 let data = [];
 let clusters = [];
 let k = parseInt(kSlider.value);
@@ -19,14 +24,14 @@ let algorithmState = 'initial'; // initial, started, step, finished
 const colors = ['#4363d8', '#e6194B', '#f58231', '#3cb44b', '#ffe119', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4'];
 
 // --- Event Listeners ---
-generateDataBtn.addEventListener('click', () => {
+generateDataPointsBtn.addEventListener('click', () => {
     reset();
     generateData();
 });
 
 initializeCentroidsBtn.addEventListener('click', () => {
     if (data.length === 0) {
-        alert("Please generate data first.");
+        alert("Please generate data points first.");
         return;
     }
     resetClustering();
@@ -70,15 +75,34 @@ numPointsInput.addEventListener('change', () => {
     }
 });
 
+resetCameraBtn.addEventListener('click', () => {
+    setDefaultCameraView();
+});
+
 
 // --- Core Functions ---
 
-function init() {
+function setupScene() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xffffff);
 
     camera = new THREE.PerspectiveCamera(75, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
-    camera.position.set(0, 0, 6);
+    
+    // Set default angle and zoom
+    const defaultZoom = 9;
+    const defaultAngleX = -24 * (Math.PI / 180); // Convert to radians
+    const defaultAngleY = 24 * (Math.PI / 180); // Convert to radians
+        const verticalOffset = -0.6; // Move cube slightly higher on the screen
+
+    // Start with a vector pointing along the Z axis
+    const cameraPosition = new THREE.Vector3(0, 0, defaultZoom);
+    // Rotate it to the desired angle
+    const euler = new THREE.Euler(defaultAngleX, defaultAngleY, 0, 'YXZ');
+    cameraPosition.applyEuler(euler);
+    // Add the vertical offset
+    cameraPosition.y += verticalOffset;
+
+    camera.position.copy(cameraPosition);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
@@ -91,13 +115,21 @@ function init() {
     directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
 
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
+
+    // Set controls target and camera lookAt to the offset
+    controls.target.set(0, verticalOffset, 0);
+    camera.lookAt(0, verticalOffset, 0);
+    controls.update();
 
     window.addEventListener('resize', onWindowResize, false);
     
     animate();
+}
+
+function init() {
     generateData();
     updateButtons();
 }
@@ -112,11 +144,7 @@ function generateData() {
             cluster: -1
         });
     }
-    algorithmState = 'initial';
-    runningK = -1;
-    iteration = 0;
-    updateIterationInfo();
-    draw();
+    resetClustering(); // Reset algorithm state but not camera
 }
 
 function startAlgorithm() {
@@ -150,20 +178,29 @@ function runSingleStep() {
 }
 
 function reset() {
+    // Clear scene objects
+    if (points) scene.remove(points);
+    if (centroids) scene.remove(centroids);
+    if (lines) scene.remove(lines);
+    
+    // Reset data arrays
     data = [];
-    centroids = [];
     clusters = [];
+    
+    // Reset algorithm state
     iteration = 0;
+    runningK = -1;
     algorithmState = 'initial';
-    if (scene) {
-         while(scene.children.length > 0){ 
-            scene.remove(scene.children[0]); 
-        }
-    }
-    init();
+    
+    updateIterationInfo();
+    updateButtons();
 }
 
 function resetClustering() {
+    // Clear visual elements related to clustering
+    if (centroids) scene.remove(centroids);
+    if (lines) scene.remove(lines);
+
     clusters = [];
     iteration = 0;
     runningK = -1;
@@ -290,13 +327,10 @@ function updateIterationInfo() {
 }
 
 function updateButtons() {
-    const sliderK = parseInt(kSlider.value);
-    // Disable start only if algorithm is running, no steps have been taken, and K is unchanged.
-    initializeCentroidsBtn.disabled = iteration === 0 && sliderK === runningK;
-    // Next step is available only when the algorithm is in the step phase.
+    // All buttons are always enabled, except for 'Next Step' which depends on the algorithm state.
+    initializeCentroidsBtn.disabled = false;
     nextStepBtn.disabled = algorithmState !== 'step';
-    // Generate data is always available.
-    generateDataBtn.disabled = false;
+    generateDataPointsBtn.disabled = false;
 }
 
 function onWindowResize() {
@@ -305,10 +339,47 @@ function onWindowResize() {
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
 }
 
+function updateCameraInfo() {
+    // Only update camera info if the display elements exist
+    if (camera && controls && camAngleX && camAngleY && camAngleZ && camZoom) {
+        const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+        camAngleX.textContent = (euler.x * 180 / Math.PI).toFixed(1);
+        camAngleY.textContent = (euler.y * 180 / Math.PI).toFixed(1);
+        camAngleZ.textContent = (euler.z * 180 / Math.PI).toFixed(1);
+
+        const zoomLevel = camera.position.distanceTo(controls.target);
+        camZoom.textContent = zoomLevel.toFixed(1);
+    }
+}
+
 function animate() {
     requestAnimationFrame(animate);
+    controls.update(); // Required for damping
+    updateCameraInfo();
     renderer.render(scene, camera);
 }
 
 // --- Initial Setup ---
+setupScene();
 init();
+
+function setDefaultCameraView() {
+    // Set default angle and zoom
+    const defaultZoom = 9;
+    const defaultAngleX = -24 * (Math.PI / 180); // Convert to radians
+    const defaultAngleY = 24 * (Math.PI / 180); // Convert to radians
+    const verticalOffset = -0.6;
+
+    // Start with a vector pointing along the Z axis
+    const cameraPosition = new THREE.Vector3(0, 0, defaultZoom);
+    // Rotate it to the desired angle
+    const euler = new THREE.Euler(defaultAngleX, defaultAngleY, 0, 'YXZ');
+    cameraPosition.applyEuler(euler);
+    // Add the vertical offset
+    cameraPosition.y += verticalOffset;
+
+    camera.position.copy(cameraPosition);
+    controls.target.set(0, verticalOffset, 0);
+    camera.lookAt(0, verticalOffset, 0);
+    controls.update();
+}

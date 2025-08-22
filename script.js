@@ -11,6 +11,7 @@ const camAngleY = document.getElementById('cam-angle-y');
 const camAngleZ = document.getElementById('cam-angle-z');
 const camZoom = document.getElementById('cam-zoom');
 const resetCameraBtn = document.getElementById('reset-camera');
+const currentZoomSpan = document.getElementById('current-zoom');
 
 let scene, camera, renderer, points, centroids, lines, controls;
 let data = [];
@@ -87,7 +88,16 @@ function setupScene() {
     scene.background = new THREE.Color(0xffffff);
 
     camera = new THREE.PerspectiveCamera(75, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
-    setDefaultCameraView();
+    // Use the same logic as setDefaultCameraView for initial camera setup
+    const defaultZoom = getDefaultZoom();
+    const defaultAngleX = -24 * (Math.PI / 180);
+    const defaultAngleY = 24 * (Math.PI / 180);
+    const verticalOffset = -0.6;
+    const target = new THREE.Vector3(0, verticalOffset, 0);
+    const cameraOffset = new THREE.Vector3(0, 0, defaultZoom);
+    const euler = new THREE.Euler(defaultAngleX, defaultAngleY, 0, 'YXZ');
+    cameraOffset.applyEuler(euler);
+    camera.position.copy(target.clone().add(cameraOffset));
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
@@ -129,7 +139,7 @@ function generateData() {
             cluster: -1
         });
     }
-    resetClustering(); // Reset algorithm state but not camera
+    resetClustering; // Reset algorithm state but not camera
 }
 
 function startAlgorithm() {
@@ -325,15 +335,11 @@ function onWindowResize() {
 }
 
 function updateCameraInfo() {
-    // Only update camera info if the display elements exist
-    if (camera && controls && camAngleX && camAngleY && camAngleZ && camZoom) {
-        const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-        camAngleX.textContent = (euler.x * 180 / Math.PI).toFixed(1);
-        camAngleY.textContent = (euler.y * 180 / Math.PI).toFixed(1);
-        camAngleZ.textContent = (euler.z * 180 / Math.PI).toFixed(1);
-
+    if (camera && controls) {
         const zoomLevel = camera.position.distanceTo(controls.target);
-        camZoom.textContent = zoomLevel.toFixed(1);
+        if (currentZoomSpan) {
+            currentZoomSpan.textContent = zoomLevel.toFixed(1);
+        }
     }
 }
 
@@ -346,26 +352,42 @@ function animate() {
 
 // --- Initial Setup ---
 setupScene();
-init();
+generateData();
+draw();
+updateButtons();
 
 function getDefaultZoom() {
     // Use zoom 11 for mobile, 9 for desktop
-    return window.innerWidth <= 768 ? 11 : 9;
+    return window.innerWidth > 768 ? 9 : 11;
 }
 
 function setDefaultCameraView() {
+    if (!camera || !controls) return; // Ensure camera and controls are initialized
     const defaultZoom = getDefaultZoom();
     const defaultAngleX = -24 * (Math.PI / 180); // Convert to radians
     const defaultAngleY = 24 * (Math.PI / 180); // Convert to radians
     const verticalOffset = -0.6;
 
-    const cameraPosition = new THREE.Vector3(0, 0, defaultZoom);
-    const euler = new THREE.Euler(defaultAngleX, defaultAngleY, 0, 'YXZ');
-    cameraPosition.applyEuler(euler);
-    cameraPosition.y += verticalOffset;
+    // The target is where the camera should look
+    const target = new THREE.Vector3(0, verticalOffset, 0);
 
-    camera.position.copy(cameraPosition);
-    controls.target.set(0, verticalOffset, 0);
-    camera.lookAt(0, verticalOffset, 0);
+    // Start with a vector pointing along the Z axis for zoom
+    const cameraOffset = new THREE.Vector3(0, 0, defaultZoom);
+    // Rotate it to the desired angle
+    const euler = new THREE.Euler(defaultAngleX, defaultAngleY, 0, 'YXZ');
+    cameraOffset.applyEuler(euler);
+
+    // Position the camera relative to the target
+    camera.position.copy(target.clone().add(cameraOffset));
+    controls.target.copy(target);
+    camera.lookAt(target);
     controls.update();
 }
+
+window.addEventListener('resize', () => {
+    if (camera && renderer) {
+        camera.aspect = sceneContainer.clientWidth / sceneContainer.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
+    }
+});

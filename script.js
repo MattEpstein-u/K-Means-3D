@@ -15,7 +15,7 @@ let numPoints = parseInt(numPointsInput.value);
 let iteration = 0;
 let algorithmState = 'initial'; // initial, started, step, finished
 
-const colors = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4'];
+const colors = ['#4363d8', '#e6194B', '#f58231', '#3cb44b', '#ffe119', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4'];
 
 // --- Event Listeners ---
 generateDataBtn.addEventListener('click', () => {
@@ -173,11 +173,10 @@ function resetClustering() {
 function initializeCentroids() {
     clusters = [];
     for (let i = 0; i < k; i++) {
-        const randomIndex = Math.floor(Math.random() * data.length);
         clusters.push({
-            x: data[randomIndex].x,
-            y: data[randomIndex].y,
-            z: data[randomIndex].z,
+            x: (Math.random() - 0.5) * 8,
+            y: (Math.random() - 0.5) * 8,
+            z: (Math.random() - 0.5) * 8,
             points: []
         });
     }

@@ -89,3 +89,43 @@ h1 {
     font-weight: bold;
     text-align: center;
 }
+
+@media (max-width: 768px) {
+    body {
+        height: auto;
+        min-height: 100vh;
+    }
+
+    .container {
+        flex-direction: column;
+    }
+
+    #ui-panel {
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #ccc;
+        padding: 15px;
+        box-sizing: border-box;
+        gap: 15px;
+    }
+
+    #controls {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+    }
+
+    #canvas-panel {
+        flex-grow: 1;
+        padding: 10px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    #scene-container {
+        min-height: 50vh;
+    }
+}
